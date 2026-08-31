@@ -16,13 +16,16 @@ def api_scan():
         return jsonify({
             'ok': False,
             'updated_at': '',
+            'limit_up': None,
+            'yesterday_limit_up': None,
             'candidates': [],
-            'error': f'{type(e).__name__}: {e}'
-        }), 200
+            'error': f'{type(e).__name__}: {e}',
+            'note': '网页本身正常；当前是行情源连接失败。请稍后刷新。'
+        })
 
 @app.get('/health')
 def health():
-    return jsonify({'status': 'ok', 'service': 'a-share-board-radar'})
+    return jsonify({'status': 'ok', 'service': 'a-share-board-radar', 'version': '1.1'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))

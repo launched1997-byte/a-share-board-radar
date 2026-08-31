@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from data_provider import get_spot, get_limit_up_pool, get_yesterday_limit_up
+from data_provider import get_spot_with_source, get_limit_up_pool, get_yesterday_limit_up
 
 
 def f(v):
@@ -36,6 +36,27 @@ def amount_score(x):
     return 0
 
 
+def normalize_columns(df):
+    if df is None or df.empty:
+        return df
+    rename = {"涨幅": "涨跌幅", "成交额": "成交额", "换手": "换手率", "成交量": "成交量"}
+    return df.rename(columns=rename)
+
+
+def is_limit_up(row):
+    # Practical proxy from price change; special boards are kept conservative in V1.1.
+    pct = f(row.get("涨跌幅"))
+    code = str(row.get("代码", "")).zfill(6)
+    name = str(row.get("名称", ""))
+    if "ST" in name.upper() or "*ST" in name.upper():
+        return False
+    if code.startswith(("300", "301", "688")):
+        return pct >= 19.5
+    if code.startswith(("8", "4")):
+        return pct >= 29.0
+    return pct >= 9.5
+
+
 def score_stock(row):
     turnover = f(row.get("换手率"))
     volume_ratio = f(row.get("量比"))
@@ -52,7 +73,7 @@ def score_stock(row):
         close_strength = price / high
         score += 15 if close_strength >= .998 else 10 if close_strength >= .99 else 5 if close_strength >= .97 else 0
 
-    if pct >= 9.5:
+    if is_limit_up(row):
         score += 15
 
     if amount >= 300000000:
@@ -64,17 +85,28 @@ def score_stock(row):
 
 
 def scan_market():
-    """收盘扫描。连板数在 V1.1 中先用今日/昨日涨停池做保守识别；后续历史库接入后再精确到 N 板。"""
-    spot = get_spot()
+    spot, source, source_errors = get_spot_with_source()
     limit_up = get_limit_up_pool()
     yesterday = get_yesterday_limit_up()
 
     if spot is None or spot.empty:
-        return {"ok": False, "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "candidates": [], "error": "全市场行情为空"}
+        return {
+            "ok": False,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "source": source,
+            "source_errors": source_errors,
+            "candidates": [],
+            "error": "全市场行情为空；" + "；".join(source_errors),
+        }
 
+    spot = normalize_columns(spot.copy())
     for df in (spot, limit_up, yesterday):
         if not df.empty and "代码" in df.columns:
-            df["代码"] = df["代码"].astype(str).str.zfill(6)
+            df["代码"] = df["代码"].astype(str).str.extract(r"(\d{6})")[0].fillna("")
+
+    # If the Eastmoney limit-up pool is unavailable, derive a daily limit-up candidate pool from the full spot feed.
+    if limit_up is None or limit_up.empty:
+        limit_up = spot[spot.apply(is_limit_up, axis=1)].copy()
 
     yesterday_codes = set(yesterday["代码"]) if not yesterday.empty and "代码" in yesterday.columns else set()
     candidates = []
@@ -83,8 +115,13 @@ def scan_market():
         code = str(lr.get("代码", "")).zfill(6)
         rows = spot[spot["代码"] == code]
         if rows.empty:
+            row = lr
+        else:
+            row = rows.iloc[0]
+
+        if not is_limit_up(row):
             continue
-        row = rows.iloc[0]
+
         board = 2 if code in yesterday_codes else 1
         score = score_stock(row)
         risk = 0
@@ -114,8 +151,10 @@ def scan_market():
     return {
         "ok": True,
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": source,
+        "source_errors": source_errors,
         "limit_up": len(limit_up),
         "yesterday_limit_up": len(yesterday),
         "candidates": candidates[:10],
-        "note": "V1.1：规则评分，不等于盈利概率；N板精确历史识别与竞价/盘中数据将在下一阶段接入。",
+        "note": "V1.1：多行情源 + 涨停池故障降级 + 风险评分。N板精确历史识别、竞价和盘中逐笔/回封仍需后续实时数据源。",
     }

@@ -1,6 +1,7 @@
 from datetime import datetime
 from data_provider import get_spot_with_source
 
+
 def f(v):
     try:return float(str(v).replace(',','')) if v not in (None,'') else 0.0
     except:return 0.0
@@ -10,9 +11,29 @@ def lim_pct(code):
 
 def is_st(name):return 'ST' in str(name).upper() or '退' in str(name)
 
+def classify_board(name):
+    # 当前实时快照不伪造N板；板块名称仅在数据源提供行业/概念字段时使用。
+    s=str(name or '')
+    return s if s else '未分类'
+
+def ladder(pct, intraday, distance, ratio):
+    if pct >= 9.4:return 'A·打板'
+    if pct >= 7 and distance <= 3:return 'B·冲板'
+    if pct >= 5 and intraday >= 10:return 'C·强势'
+    if pct >= 3 and intraday >= 8:return 'D·异动'
+    return 'E·观察'
+
+def score_parts(pct, turnover, ratio, amount, intraday, distance):
+    momentum=min(25, (10 if pct>=8 else 7 if pct>=6 else 4 if pct>=4 else 2)+(8 if intraday>=12 else 6 if intraday>=9 else 3 if intraday>=6 else 0)+(7 if distance<=2 else 4 if distance<=4 else 0))
+    liquidity=15 if amount>=5e8 else 11 if amount>=2e8 else 7 if amount>=1e8 else 3
+    turnover_s=15 if 8<=turnover<=25 else 11 if 5<=turnover<8 or 25<turnover<=32 else 6 if turnover>0 else 0
+    volume_s=15 if 1.3<=ratio<=3.5 else 11 if 1.1<=ratio<1.3 or 3.5<ratio<=5 else 6 if ratio>0 else 0
+    board_s=20 if pct>=lim_pct('000001') else 15 if pct>=8 else 10 if pct>=6 else 6
+    return min(100,int(momentum+liquidity+turnover_s+volume_s+board_s)), momentum, liquidity, turnover_s, volume_s, board_s
+
 def scan_market():
     df,source,errors=get_spot_with_source(); now=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    if df is None or df.empty:return {'ok':False,'version':'4.1','source':source,'updated_at':now,'stats':{},'candidates':[],'error':'行情源不可用：'+'；'.join(errors)}
+    if df is None or df.empty:return {'ok':False,'version':'4.2','source':source,'updated_at':now,'stats':{},'candidates':[],'error':'行情源不可用：'+'；'.join(errors)}
     cols=df.columns
     def v(r,names):
         for x in names:
@@ -24,15 +45,16 @@ def scan_market():
         if not code or len(code)!=6 or is_st(name):continue
         pct=f(v(r,['涨跌幅','pct_chg','change_percent'])); price=f(v(r,['最新价','trade','price','last'])); high=f(v(r,['最高','high'])); low=f(v(r,['最低','low'])); turnover=f(v(r,['换手率','turnover'])); ratio=f(v(r,['量比','ratio'])); amount=f(v(r,['成交额','amount']))
         intraday=(price/low-1)*100 if low>0 else 0; distance=lim_pct(code)-pct
-        stage=None; score=0; risk=0
-        if pct>=lim_pct(code):
-            stage='打板池'; score=min(100,int((18 if 6<=turnover<=28 else 12 if turnover>=3 else 5)+(15 if 1.1<=ratio<=4 else 7)+(12 if amount>=5e8 else 9 if amount>=2e8 else 4)+(15 if high and price/high>=.998 else 8)+40)); risk=min(100,(30 if turnover>45 else 18 if turnover>32 else 0)+(25 if ratio>5 else 12 if ratio>4 else 0)+(20 if amount<8e7 else 0))
-        elif pct>=5 and distance<=5 and intraday>=5:
-            stage='冲板池'; score=min(100,int((22 if pct>=8 else 18 if pct>=6 else 14)+(20 if intraday>=12 else 16 if intraday>=9 else 11)+(18 if ratio>=2 else 12 if ratio>=1.3 else 6)+(15 if amount>=5e8 else 10 if amount>=2e8 else 5)+(10 if turnover>=6 else 6)+(15 if distance<=2 else 10))); risk=min(100,(30 if ratio>5 else 15 if ratio>4 else 0)+(25 if turnover>35 else 12 if turnover>28 else 0))
-        elif (pct>=3 and intraday>=6 and ratio>=1.2) or (pct>=2 and intraday>=8 and amount>=1e8) or (pct>=4 and intraday>=10):
-            stage='异动池'; score=min(100,int((18 if pct>=6 else 12)+(20 if intraday>=12 else 14 if intraday>=9 else 8)+(18 if ratio>=2 else 10 if ratio>=1.2 else 5)+(15 if amount>=5e8 else 10 if amount>=2e8 else 6)+(10 if turnover>=6 else 5))); risk=min(100,(30 if ratio>5 else 15 if ratio>4 else 0)+(25 if turnover>35 else 12 if turnover>28 else 0))
+        # 三类核心池：板块、梯度、分数。板块若行情源没有行业字段则明确标记，绝不猜测。
+        stage='打板池' if pct>=lim_pct(code) else '冲板池' if pct>=5 and distance<=5 and intraday>=5 else '异动池' if ((pct>=3 and intraday>=6 and ratio>=1.2) or (pct>=2 and intraday>=8 and amount>=1e8) or (pct>=4 and intraday>=10)) else None
         if not stage:continue
-        signal='强打候选' if stage=='打板池' and score>=82 and risk<55 else '重点盯盘' if stage=='冲板池' and score>=70 and risk<70 else '异动观察' if stage=='异动池' and score>=65 and risk<75 else '等待确认'
-        out.append({'code':code,'name':name,'stage':stage,'board_text':'历史N板待确认','score':score,'risk':risk,'turnover':turnover,'volume_ratio':ratio,'amount':round(amount/1e8,2),'pct':pct,'intraday_gain':round(intraday,2),'distance_to_limit':round(max(0,distance),2),'signal':signal,'data_quality':'实时快照'})
+        score,momentum,liquidity,turn_s,vol_s,board_s=score_parts(pct,turnover,ratio,amount,intraday,distance)
+        risk=min(100,(25 if turnover>35 else 10 if turnover>28 else 0)+(25 if ratio>5 else 10 if ratio>3.5 else 0)+(20 if amount<8e7 else 0)+(15 if distance<0 else 0))
+        signal='强打候选' if stage=='打板池' and score>=82 and risk<55 else '重点盯盘' if stage=='冲板池' and score>=68 and risk<70 else '异动观察' if stage=='异动池' and score>=62 and risk<75 else '等待确认'
+        out.append({'code':code,'name':name,'sector':classify_board(v(r,['行业','所属行业','sector','industry','板块'])), 'stage':stage,'ladder':ladder(pct,intraday,distance,ratio),'board_text':'N板待历史确认','score':score,'risk':risk,'turnover':turnover,'volume_ratio':ratio,'amount':round(amount/1e8,2),'pct':pct,'intraday_gain':round(intraday,2),'distance_to_limit':round(max(0,distance),2),'signal':signal,'score_breakdown':{'动能':momentum,'流动性':liquidity,'换手':turn_s,'量能':vol_s,'涨停/梯度':board_s},'data_quality':'实时快照'})
     order={'打板池':0,'冲板池':1,'异动池':2}; out.sort(key=lambda x:(order[x['stage']],-x['score'],x['risk'],-x['amount']))
-    return {'ok':True,'version':'4.1','source':source,'updated_at':now,'stats':{'limit_up':sum(x['stage']=='打板池' for x in out),'surge':sum(x['stage']=='冲板池' for x in out),'abnormal':sum(x['stage']=='异动池' for x in out),'total':len(out)},'candidates':out[:150],'note':'V4.1扩大候选池：降低冲板/异动门槛，最多展示150只。重点捕捉日内低点快速拉升、接近涨停和量能异常股票。N板/竞价/炸板/回封在未接入真实历史/Tick前不伪造。'}
+    sectors={}
+    for x in out:
+        s=x['sector']; sectors[s]=sectors.get(s,0)+1
+    sector_rank=sorted([{'sector':k,'count':v} for k,v in sectors.items() if k!='未分类'],key=lambda x:x['count'],reverse=True)[:20]
+    return {'ok':True,'version':'4.2','source':source,'updated_at':now,'stats':{'limit_up':sum(x['stage']=='打板池' for x in out),'surge':sum(x['stage']=='冲板池' for x in out),'abnormal':sum(x['stage']=='异动池' for x in out),'total':len(out)},'sector_rank':sector_rank,'candidates':out[:150],'note':'V4.2：按板块、梯度、分数三维筛选。梯度=A打板、B冲板、C强势、D异动、E观察。行情源未提供板块字段时显示未分类；精确N板仍需连续历史数据。'}

@@ -3,3 +3,4 @@ gunicorn==23.0.0
 akshare==1.17.63
 pandas==2.2.3
 numpy==2.2.6
+requests==2.32.4

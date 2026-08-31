@@ -7,11 +7,11 @@ TIMEOUT = 8
 UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1'
 
 def _session():
-    s = requests.Session(); s.headers.update({'User-Agent': UA, 'Accept': '*/*', 'Connection': 'close'}); return s
+    s=requests.Session(); s.headers.update({'User-Agent':UA,'Accept':'*/*','Connection':'close'}); return s
 
 def _num(v):
-    try: return float(str(v).replace(',', '').strip())
-    except Exception: return 0.0
+    try:return float(str(v).replace(',','').strip())
+    except Exception:return 0.0
 
 def _sina_snapshot():
     s=_session(); errors=[]; rows=[]
@@ -49,13 +49,13 @@ def get_spot_with_source():
         for attempt in range(2):
             try:
                 df,label=fn()
-                if df is not None and not df.empty: return df,label,errors
-            except Exception as e: errors.append(f'{name}: {type(e).__name__}: {e}'); time.sleep(0.8*(attempt+1))
+                if df is not None and not df.empty:return df,label,errors
+            except Exception as e:errors.append(f'{name}: {type(e).__name__}: {e}');time.sleep(0.8*(attempt+1))
     return pd.DataFrame(),'无可用行情源',errors
 
 def get_spot():
     df,source,errors=get_spot_with_source()
-    if df.empty: raise ConnectionError('；'.join(errors) or '没有可用行情源')
+    if df.empty:raise ConnectionError('；'.join(errors) or '没有可用行情源')
     return df
 
 def _ak_pool(name):
@@ -63,18 +63,19 @@ def _ak_pool(name):
         import akshare as ak
         df=getattr(ak,name)()
         return df if df is not None else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
+    except Exception:return pd.DataFrame()
 
-def get_limit_up_pool(): return _ak_pool('stock_zt_pool_em')
-def get_yesterday_limit_up(): return _ak_pool('stock_zt_pool_previous_em')
-def get_strong_pool(): return _ak_pool('stock_zt_pool_strong_em')
+def get_limit_up_pool():return _ak_pool('stock_zt_pool_em')
+def get_yesterday_limit_up():return _ak_pool('stock_zt_pool_previous_em')
+def get_strong_pool():return _ak_pool('stock_zt_pool_strong_em')
+def get_blown_pool():return _ak_pool('stock_zt_pool_zbgc_em')
 
 def provider_status():
     result={'ok':False,'providers':[]}
     for name,fn in [('iTick',_itick_snapshot),('新浪',_sina_snapshot),('东方财富',_eastmoney_snapshot)]:
         try:
-            df,label=fn(); ok=df is not None and not df.empty; result['providers'].append({'name':label,'ok':ok,'rows':int(len(df)) if df is not None else 0}); result['ok']|=ok
-        except Exception as e: result['providers'].append({'name':name,'ok':False,'error':f'{type(e).__name__}: {e}'})
-    strong=get_strong_pool(); ok=strong is not None and not strong.empty; result['providers'].append({'name':'AKShare-涨停强势池','ok':ok,'rows':int(len(strong))}); result['ok']|=ok
+            df,label=fn();ok=df is not None and not df.empty;result['providers'].append({'name':label,'ok':ok,'rows':int(len(df)) if df is not None else 0});result['ok']|=ok
+        except Exception as e:result['providers'].append({'name':name,'ok':False,'error':f'{type(e).__name__}: {e}'})
+    for label,fn in [('AKShare-涨停池',get_limit_up_pool),('AKShare-昨日涨停',get_yesterday_limit_up),('AKShare-炸板池',get_blown_pool)]:
+        df=fn();ok=df is not None and not df.empty;result['providers'].append({'name':label,'ok':ok,'rows':int(len(df)) if df is not None else 0});result['ok']|=ok
     return result

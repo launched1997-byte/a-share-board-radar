@@ -2,7 +2,7 @@ import os
 from flask import Flask,jsonify,render_template
 app=Flask(__name__)
 @app.get('/')
-def index(): return render_template('index.html')
+def index(): return render_template('v6_index.html')
 @app.get('/api/scan')
 def api_scan():
     try:

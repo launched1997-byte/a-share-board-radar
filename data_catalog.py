@@ -1,0 +1,21 @@
+THEMES = [
+ {'id':'ai-infra','name':'AI算力基础设施','icon':'🧠','description':'服务器、液冷、光模块、高速互连','children':['高速光模块','液冷散热','服务器','高速连接'],'stocks':[
+  {'code':'300308','name':'中际旭创','tags':['CPO','光模块'],'trend':92,'strength':95,'catalyst':90},
+  {'code':'300502','name':'新易盛','tags':['光模块','AI算力'],'trend':90,'strength':92,'catalyst':88},
+  {'code':'000977','name':'浪潮信息','tags':['服务器','AI'],'trend':84,'strength':86,'catalyst':88}]},
+ {'id':'semiconductor','name':'半导体产业链','icon':'⚡','description':'设备、材料、先进封装与国产替代','children':['半导体设备','材料','先进封装','存储'],'stocks':[
+  {'code':'688012','name':'中微公司','tags':['半导体设备'],'trend':88,'strength':90,'catalyst':91},
+  {'code':'688981','name':'中芯国际','tags':['晶圆制造'],'trend':86,'strength':88,'catalyst':92},
+  {'code':'002371','name':'北方华创','tags':['半导体设备'],'trend':91,'strength':89,'catalyst':93}]},
+ {'id':'pcb','name':'PCB与电子材料','icon':'🔌','description':'高阶PCB、CCL、电子元器件','children':['高阶PCB','CCL','MLCC','玻璃基板'],'stocks':[
+  {'code':'002463','name':'沪电股份','tags':['PCB','服务器'],'trend':89,'strength':91,'catalyst':86},
+  {'code':'002916','name':'深南电路','tags':['PCB','封装基板'],'trend':87,'strength':89,'catalyst':90},
+  {'code':'002815','name':'崇达技术','tags':['PCB'],'trend':74,'strength':77,'catalyst':75}]},
+ {'id':'power','name':'电网与能源','icon':'⚙️','description':'特高压、电网设备、储能与新能源','children':['特高压','电网设备','储能','风电'],'stocks':[
+  {'code':'000400','name':'许继电气','tags':['特高压','电网'],'trend':82,'strength':84,'catalyst':87},
+  {'code':'600089','name':'特变电工','tags':['电网','变压器'],'trend':80,'strength':81,'catalyst':85},
+  {'code':'601179','name':'中国西电','tags':['特高压'],'trend':79,'strength':83,'catalyst':84}]},
+ {'id':'biotech','name':'创新药与医疗','icon':'🧬','description':'创新药、CXO与医疗服务','children':['创新药','ADC','CXO','医疗器械'],'stocks':[
+  {'code':'600276','name':'恒瑞医药','tags':['创新药'],'trend':78,'strength':80,'catalyst':89},
+  {'code':'300347','name':'泰格医药','tags':['CXO'],'trend':72,'strength':76,'catalyst':82}]}
+]
